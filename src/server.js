@@ -14,6 +14,7 @@ import knowledgeRoutes from "./routes/knowledge.js";
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.resolve(process.env.UPLOAD_DIR || path.join(__dirname, "../uploads"));
+
 fs.mkdirSync(uploadDir, { recursive: true });
 app.use(helmet());
 app.use(
@@ -34,7 +35,8 @@ app.use((err, _req, res, _next) => {
     .status(err.status || 500)
     .json({ message: err.status ? err.message : "Internal server error" });
 });
-const port = process.env.PORT || 4000;
-await mongoose.connect(process.env.MONGODB_URI);
 
+const port = process.env.PORT || 4000;
+
+await mongoose.connect(process.env.MONGODB_URI);
 app.listen(port, () => console.log(`Support API listening on :${port}`));

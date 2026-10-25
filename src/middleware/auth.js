@@ -14,8 +14,8 @@ export async function requireAuth(req, res, next) {
         .status(503)
         .json({ message: "Microsoft Entra API authentication is not configured." });
     const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+
     if (!token) return res.status(401).json({ message: "Bearer token required." });
-    console.log({ token });
 
     const { payload } = await jwtVerify(token, jwks, { issuer, audience });
 
