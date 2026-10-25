@@ -59,8 +59,8 @@ const ticketSchema = new mongoose.Schema(
     assigneeName: { type: String, default: "Unassigned" },
     messages: [messageSchema],
     firstResponseAt: Date,
-    resolvedAt: Date,
-    closedAt: Date,
+    resolvedAt: { type: Date, default: null },
+    closedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );

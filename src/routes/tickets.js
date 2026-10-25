@@ -45,6 +45,7 @@ const canRead = (t, u) =>
   u.groups?.includes(process.env.IT_SUPPORT_GROUP_ID) ||
   t.requesterId === u.id ||
   t.assigneeId === u.id;
+
 router.get("/", async (req, res, next) => {
   try {
     const support =
@@ -64,6 +65,7 @@ router.get("/", async (req, res, next) => {
     next(e);
   }
 });
+
 router.get("/metrics", requireSupport, async (_req, res, next) => {
   try {
     const [total, open, inProgress, resolved, closed, avg] = await Promise.all([
@@ -73,8 +75,23 @@ router.get("/metrics", requireSupport, async (_req, res, next) => {
       Ticket.countDocuments({ status: "Resolved" }),
       Ticket.countDocuments({ status: "Closed" }),
       Ticket.aggregate([
-        { $match: { resolvedAt: { $ne: null } } },
-        { $project: { duration: { $subtract: ["$resolvedAt", "$createdAt"] } } },
+        {
+          $match: {
+            closedAt: { $ne: null },
+          },
+        },
+        {
+          $project: {
+            createdAt: {
+              $convert: { input: "$createdAt", to: "date", onError: null, onNull: null },
+            },
+            closedAt: {
+              $convert: { input: "$closedAt", to: "date", onError: null, onNull: null },
+            },
+          },
+        },
+        { $match: { createdAt: { $ne: null }, closedAt: { $ne: null } } },
+        { $project: { duration: { $subtract: ["$closedAt", "$createdAt"] } } },
         { $group: { _id: null, avgMs: { $avg: "$duration" } } },
       ]),
     ]);
@@ -90,6 +107,7 @@ router.get("/metrics", requireSupport, async (_req, res, next) => {
     next(e);
   }
 });
+
 router.post("/", upload.array("attachments", 5), async (req, res, next) => {
   try {
     const { subject, description, department, category, priority } = req.body;
@@ -119,6 +137,7 @@ router.post("/", upload.array("attachments", 5), async (req, res, next) => {
     next(e);
   }
 });
+
 router.get("/:id", async (req, res, next) => {
   try {
     const t = await Ticket.findById(req.params.id);
@@ -129,6 +148,7 @@ router.get("/:id", async (req, res, next) => {
     next(e);
   }
 });
+
 router.post("/:id/messages", upload.array("attachments", 5), async (req, res, next) => {
   try {
     const t = await Ticket.findById(req.params.id);
@@ -159,6 +179,7 @@ router.post("/:id/messages", upload.array("attachments", 5), async (req, res, ne
     next(e);
   }
 });
+
 router.patch("/:id/claim", requireSupport, async (req, res, next) => {
   try {
     const t = await Ticket.findById(req.params.id);
@@ -174,6 +195,33 @@ router.patch("/:id/claim", requireSupport, async (req, res, next) => {
     next(e);
   }
 });
+
+// A ticket may be closed by its creator or an authorized support agent.
+router.patch("/:id/close", async (req, res, next) => {
+  try {
+    const t = await Ticket.findById(req.params.id);
+    if (!t) return res.status(404).json({ message: "Ticket not found." });
+    const allowedGroup = (process.env.IT_SUPPORT_GROUP_ID || "").trim();
+    const isSupport = Boolean(
+      req.user?.roles?.includes("Support.Agent") ||
+      (allowedGroup && req.user?.groups?.includes(allowedGroup)),
+    );
+    const isCreator = Boolean(t.requesterId && req.user?.id && t.requesterId === req.user.id);
+    if (!isCreator && !isSupport)
+      return res
+        .status(403)
+        .json({ message: "Only the ticket creator or MIS support staff can close this ticket." });
+    if (t.status !== "Closed") {
+      t.status = "Closed";
+      t.closedAt = new Date();
+      await t.save();
+    }
+    return res.json(t);
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.patch("/:id/status", requireSupport, async (req, res, next) => {
   try {
     const { status, priority } = req.body;
@@ -193,4 +241,5 @@ router.patch("/:id/status", requireSupport, async (req, res, next) => {
     next(e);
   }
 });
+
 export default router;
