@@ -59,7 +59,7 @@ router.get("/", async (req, res, next) => {
       filter.assigneeId = req.user.id;
     }
     if (req.query.status) filter.status = req.query.status;
-    const items = await Ticket.find(filter).sort({ updatedAt: -1 }).select("-messages");
+    const items = await Ticket.find(filter).sort({ updatedAt: -1 }); //.select("-messages");
     res.json(items);
   } catch (e) {
     next(e);
