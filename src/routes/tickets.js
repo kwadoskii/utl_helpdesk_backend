@@ -5,6 +5,12 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import Ticket from "../models/Ticket.js";
 import { requireSupport } from "../middleware/auth.js";
+import {
+  notifySupportTeam,
+  notifyTicketParticipants,
+  getSupportNotificationRecipients,
+  notifyUsers,
+} from "../services/notificationService.js";
 const router = Router();
 const uploadRoot = path.resolve(process.env.UPLOAD_DIR || "./uploads");
 fs.mkdirSync(uploadRoot, { recursive: true });
@@ -132,6 +138,15 @@ router.post("/", upload.array("attachments", 5), async (req, res, next) => {
         },
       ],
     });
+
+    await notifySupportTeam({
+      excludeUserId: req.user.id,
+      type: "ticket_created",
+      title: "New ticket created",
+      message: `${t.requesterName || "A user"} created a ticket: ${t.subject}`,
+      ticketId: t._id,
+    });
+
     res.status(201).json(t);
   } catch (e) {
     next(e);
@@ -171,9 +186,46 @@ router.post("/:id/messages", upload.array("attachments", 5), async (req, res, ne
       isInternalNote: internal,
       attachments: fileMeta(files),
     });
+
     if (!t.firstResponseAt && req.user.id !== t.requesterId) t.firstResponseAt = new Date();
     if (t.status === "Open" && req.user.id !== t.requesterId) t.status = "In progress";
     await t.save();
+
+    //
+    if (internal) {
+      // Internal notes are visible only to support staff.
+      const supportRecipients = await getSupportNotificationRecipients().filter(
+        (id) => id !== String(req.user.id),
+      );
+
+      await notifyUsers({
+        recipients: supportRecipients,
+        type: "new_message",
+        title: "New internal note",
+        message: `An internal note was added to: ${t.subject}`,
+        ticketId: t._id,
+      });
+    } else {
+      await notifyTicketParticipants({
+        ticket: t,
+        excludeUserId: req.user.id,
+        type: "new_message",
+        title: "New ticket message",
+        message: `${req.user.name || req.user.email} replied to: ${t.subject}`,
+        ticketId: t._id,
+      });
+
+      // If no agent has claimed the ticket, notify the support team.
+      if (!t.assigneeId && req.user.id === t.requesterId) {
+        await notifySupportTeam({
+          type: "new_message",
+          title: "New ticket message",
+          message: `A new reply was added to: ${t.subject}`,
+          ticketId: t._id,
+        });
+      }
+    }
+
     res.status(201).json(t);
   } catch (e) {
     next(e);
@@ -201,21 +253,36 @@ router.patch("/:id/close", async (req, res, next) => {
   try {
     const t = await Ticket.findById(req.params.id);
     if (!t) return res.status(404).json({ message: "Ticket not found." });
+
     const allowedGroup = (process.env.IT_SUPPORT_GROUP_ID || "").trim();
     const isSupport = Boolean(
       req.user?.roles?.includes("Support.Agent") ||
       (allowedGroup && req.user?.groups?.includes(allowedGroup)),
     );
     const isCreator = Boolean(t.requesterId && req.user?.id && t.requesterId === req.user.id);
+
     if (!isCreator && !isSupport)
       return res
         .status(403)
         .json({ message: "Only the ticket creator or MIS support staff can close this ticket." });
-    if (t.status !== "Closed") {
+
+    const wasAlreadyClosed = t.status === "Closed";
+
+    if (!wasAlreadyClosed) {
       t.status = "Closed";
       t.closedAt = new Date();
       await t.save();
+
+      await notifyTicketParticipants({
+        ticket: t,
+        excludeUserId: req.user.id,
+        type: "ticket_closed",
+        title: "Ticket closed",
+        message: `Ticket "${t.subject}" has been closed.`,
+        ticketId: t._id,
+      });
     }
+
     return res.json(t);
   } catch (e) {
     next(e);
@@ -226,16 +293,32 @@ router.patch("/:id/status", requireSupport, async (req, res, next) => {
   try {
     const { status, priority } = req.body;
     const t = await Ticket.findById(req.params.id);
+
     if (!t) return res.status(404).json({ message: "Ticket not found." });
     if (status && !["Open", "In progress", "Pending", "Resolved", "Closed"].includes(status))
       return res.status(400).json({ message: "Invalid status." });
+
+    const previousStatus = t.status;
+
     if (status) {
       t.status = status;
       if (status === "Resolved") t.resolvedAt = new Date();
       if (status === "Closed") t.closedAt = new Date();
     }
+
     if (priority && ["Low", "Medium", "High", "Urgent"].includes(priority)) t.priority = priority;
     await t.save();
+
+    if (status === "Closed" && previousStatus !== "Closed") {
+      await notifyTicketParticipants({
+        ticket: t,
+        excludeUserId: req.user.id,
+        type: "ticket_closed",
+        title: "Ticket closed",
+        message: `Ticket "${t.subject}" has been closed.`,
+        ticketId: t._id,
+      });
+    }
     res.json(t);
   } catch (e) {
     next(e);

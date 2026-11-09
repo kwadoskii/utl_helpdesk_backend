@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { requireAuth } from "./middleware/auth.js";
 import ticketRoutes from "./routes/tickets.js";
 import knowledgeRoutes from "./routes/knowledge.js";
+import notificationRoutes from "./routes/notification.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,7 @@ app.use(rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyH
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/api/tickets", requireAuth, ticketRoutes);
 app.use("/api/knowledge", requireAuth, knowledgeRoutes);
+app.use("/api/notifications", requireAuth, notificationRoutes);
 app.use((err, _req, res, _next) => {
   console.error(err);
   res
