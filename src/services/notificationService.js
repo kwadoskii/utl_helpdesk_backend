@@ -12,7 +12,7 @@ export const notifyUsers = async ({ recipients, type, title, message, ticketId }
   }
 
   try {
-    const result = await Notification.insertMany(
+    await Notification.insertMany(
       recipientIds.map((recipientId) => ({
         recipientId,
         type,
@@ -45,8 +45,6 @@ export const notifySupportTeam = async ({ excludeUserId, ...notification }) => {
 
   const recipients = supportRecipients.filter((id) => id !== String(excludeUserId));
 
-  console.log("Support notification recipients:", recipients);
-
   await notifyUsers({
     ...notification,
     recipients,
@@ -54,9 +52,11 @@ export const notifySupportTeam = async ({ excludeUserId, ...notification }) => {
 };
 
 export const notifyTicketParticipants = async ({ ticket, excludeUserId, ...notification }) => {
-  const recipients = uniqueRecipients([ticket.requesterId, ticket.assigneeId]).filter(
-    (id) => id !== String(excludeUserId),
-  );
+  const recipients = uniqueRecipients([
+    ticket.requesterId,
+    ticket.assigneeId,
+    ...ticket.messages?.map((m) => m.authorId),
+  ]).filter((id) => id !== String(excludeUserId));
 
   await notifyUsers({
     ...notification,
@@ -64,5 +64,4 @@ export const notifyTicketParticipants = async ({ ticket, excludeUserId, ...notif
   });
 };
 
-// Exported for use elsewhere in the ticketing system.
 export const getSupportNotificationRecipients = getSupportRecipientIds;
