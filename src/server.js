@@ -11,6 +11,7 @@ import { requireAuth } from "./middleware/auth.js";
 import ticketRoutes from "./routes/tickets.js";
 import knowledgeRoutes from "./routes/knowledge.js";
 import notificationRoutes from "./routes/notification.js";
+import settingRoutes from "./routes/setting.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -22,7 +23,7 @@ app.use(
   cors({
     origin: (process.env.CLIENT_ORIGIN || "http://localhost:3000").split(","),
     allowedHeaders: ["Authorization", "Content-Type"],
-    methods: ["GET", "POST", "PATCH", "DELETE"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   }),
 );
 app.use(express.json({ limit: "1mb" }));
@@ -31,6 +32,7 @@ app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/api/tickets", requireAuth, ticketRoutes);
 app.use("/api/knowledge", requireAuth, knowledgeRoutes);
 app.use("/api/notifications", requireAuth, notificationRoutes);
+app.use("/api/settings", requireAuth, settingRoutes);
 app.use((err, _req, res, _next) => {
   console.error(err);
   res

@@ -139,12 +139,14 @@ router.post("/", upload.array("attachments", 5), async (req, res, next) => {
       ],
     });
 
-    await notifySupportTeam({
+    notifySupportTeam({
       excludeUserId: req.user.id,
       type: "ticket_created",
+      emailEvent: "ticket_created",
       title: "New ticket created",
       message: `${t.requesterName || "A user"} created a ticket: ${t.subject}`,
       ticketId: t._id,
+      ticket: t,
     });
 
     res.status(201).json(t);
@@ -169,15 +171,27 @@ router.post("/:id/messages", upload.array("attachments", 5), async (req, res, ne
     const t = await Ticket.findById(req.params.id);
     if (!t) return res.status(404).json({ message: "Ticket not found." });
     if (!canRead(t, req.user)) return res.status(403).json({ message: "Not permitted." });
+
     const body = String(req.body.body || "").trim();
     const files = req.files || [];
+
     if (!body && !files.length)
       return res.status(400).json({ message: "Message or attachment required." });
+
     if (t.status === "Closed")
       return res.status(409).json({ message: "Closed tickets cannot receive replies." });
+
     const internal = req.body.isInternalNote === "true";
-    if (internal && !req.user.roles.includes("Support.Agent"))
-      return res.status(403).json({ message: "Only support staff can add internal notes." });
+    const isSupport =
+      req.user.roles?.includes("Support.Agent") ||
+      req.user.groups?.includes(process.env.IT_SUPPORT_GROUP_ID?.trim());
+
+    if (internal && !isSupport) {
+      return res.status(403).json({
+        message: "Only support staff can add internal notes.",
+      });
+    }
+
     t.messages.push({
       authorId: req.user.id,
       authorName: req.user.name || req.user.email,
@@ -188,40 +202,47 @@ router.post("/:id/messages", upload.array("attachments", 5), async (req, res, ne
     });
 
     if (!t.firstResponseAt && req.user.id !== t.requesterId) t.firstResponseAt = new Date();
-    if (t.status === "Open" && req.user.id !== t.requesterId) t.status = "In progress";
+    if (t.status === "Open" && req.user.id !== t.requesterId) {
+      t.status = "In progress";
+      t.assigneeId = req.user.id;
+      t.assigneeName = req.user.name;
+    }
     await t.save();
 
-    //
     if (internal) {
-      // Internal notes are visible only to support staff.
-      const supportRecipients = await getSupportNotificationRecipients().filter(
-        (id) => id !== String(req.user.id),
-      );
-
-      await notifyUsers({
-        recipients: supportRecipients,
+      // Internal notes go only to IT Support members.
+      // The note body is deliberately not included in the notification email.
+      notifySupportTeam({
+        excludeUserId: req.user.id,
         type: "new_message",
+        emailEvent: "internalNote",
         title: "New internal note",
         message: `An internal note was added to: ${t.subject}`,
         ticketId: t._id,
       });
     } else {
-      await notifyTicketParticipants({
+      console.log(t);
+      notifyTicketParticipants({
         ticket: t,
         excludeUserId: req.user.id,
         type: "new_message",
+        emailEvent: "new_message",
         title: "New ticket message",
         message: `${req.user.name || req.user.email} replied to: ${t.subject}`,
         ticketId: t._id,
       });
 
-      // If no agent has claimed the ticket, notify the support team.
+      // Notify support when the requester replies to an
+      // unassigned ticket.
       if (!t.assigneeId && req.user.id === t.requesterId) {
-        await notifySupportTeam({
+        notifySupportTeam({
+          excludeUserId: req.user.id,
           type: "new_message",
+          emailEvent: "new_message",
           title: "New ticket message",
           message: `A new reply was added to: ${t.subject}`,
           ticketId: t._id,
+          ticket: t,
         });
       }
     }
@@ -273,10 +294,11 @@ router.patch("/:id/close", async (req, res, next) => {
       t.closedAt = new Date();
       await t.save();
 
-      await notifyTicketParticipants({
+      notifyTicketParticipants({
         ticket: t,
         excludeUserId: req.user.id,
         type: "ticket_closed",
+        emailEvent: "ticket_closed",
         title: "Ticket closed",
         message: `Ticket "${t.subject}" has been closed.`,
         ticketId: t._id,
@@ -310,7 +332,7 @@ router.patch("/:id/status", requireSupport, async (req, res, next) => {
     await t.save();
 
     if (status === "Closed" && previousStatus !== "Closed") {
-      await notifyTicketParticipants({
+      notifyTicketParticipants({
         ticket: t,
         excludeUserId: req.user.id,
         type: "ticket_closed",
