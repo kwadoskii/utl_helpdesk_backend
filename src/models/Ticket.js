@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { generateTicketNumber } from "../utils/generateTicketNumber.js";
 const attachmentSchema = new mongoose.Schema(
   {
     originalName: { type: String, required: true },
@@ -64,10 +65,11 @@ const ticketSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
 ticketSchema.pre("validate", async function () {
   if (!this.ticketNumber && this.isNew) {
-    const count = await mongoose.model("Ticket").countDocuments();
-    this.ticketNumber = `IT-${String(1001 + count).padStart(4, "0")}`;
+    this.ticketNumber = await generateTicketNumber();
   }
 });
+
 export default mongoose.model("Ticket", ticketSchema);
