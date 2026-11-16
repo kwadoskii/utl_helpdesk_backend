@@ -225,9 +225,9 @@ router.put("/general", requireSupport, async (req, res) => {
     if (maxFileSizeMB !== undefined) {
       const size = Number(maxFileSizeMB);
 
-      if (!Number.isInteger(size) || size < 1 || size > 100) {
+      if (!Number.isInteger(size) || size < 1 || size > 10) {
         return res.status(400).json({
-          message: "Attachment size must be between 1 and 100 MB.",
+          message: "Attachment size must be between 1 and 10 MB.",
         });
       }
 

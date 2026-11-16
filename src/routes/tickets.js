@@ -1,44 +1,12 @@
 import { Router } from "express";
-import multer from "multer";
 import path from "node:path";
-import crypto from "node:crypto";
 import fs from "node:fs";
 import Ticket from "../models/Ticket.js";
 import { requireSupport } from "../middleware/auth.js";
-import {
-  notifySupportTeam,
-  notifyTicketParticipants,
-  getSupportNotificationRecipients,
-  notifyUsers,
-} from "../services/notificationService.js";
+import { notifySupportTeam, notifyTicketParticipants } from "../services/notificationService.js";
+import { dynamicUpload } from "../utils/dynamicUpload.js";
 const router = Router();
-const uploadRoot = path.resolve(process.env.UPLOAD_DIR || "./uploads");
-fs.mkdirSync(uploadRoot, { recursive: true });
-const allowed = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "text/plain",
-]);
-const maxBytes = (Number(process.env.MAX_FILE_SIZE_MB) || 10) * 1024 * 1024;
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadRoot),
-  filename: (_req, file, cb) =>
-    cb(null, crypto.randomUUID() + path.extname(file.originalname).toLowerCase()),
-});
-const upload = multer({
-  storage,
-  limits: { fileSize: maxBytes, files: 5 },
-  fileFilter: (_req, file, cb) =>
-    cb(
-      allowed.has(file.mimetype) ? null : new Error("Unsupported attachment type."),
-      allowed.has(file.mimetype),
-    ),
-});
+
 const fileMeta = (files) =>
   files.map((f) => ({
     originalName: path.basename(f.originalname),
@@ -114,7 +82,7 @@ router.get("/metrics", requireSupport, async (_req, res, next) => {
   }
 });
 
-router.post("/", upload.array("attachments", 5), async (req, res, next) => {
+router.post("/", dynamicUpload, async (req, res, next) => {
   try {
     const { subject, description, department, category, priority } = req.body;
     if (!subject?.trim() || !description?.trim())
@@ -166,7 +134,7 @@ router.get("/:id", async (req, res, next) => {
   }
 });
 
-router.post("/:id/messages", upload.array("attachments", 5), async (req, res, next) => {
+router.post("/:id/messages", dynamicUpload, async (req, res, next) => {
   try {
     const t = await Ticket.findById(req.params.id);
     if (!t) return res.status(404).json({ message: "Ticket not found." });
