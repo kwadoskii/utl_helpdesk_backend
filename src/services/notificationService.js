@@ -99,7 +99,7 @@ async function deliverNotificationEmails({
 
     const failed = results.length - successful;
 
-    console.log(`[Email notifications] ${successful} sent, ${failed} failed.`);
+    // console.log(`[Email notifications] ${successful} sent, ${failed} failed.`);
 
     results.forEach((result, index) => {
       if (result.status === "rejected") {
@@ -125,12 +125,6 @@ export const notifyUsers = async ({
   emailEvent = type,
 }) => {
   const recipientIds = uniqueRecipients(recipients);
-
-  if (!recipientIds.length) {
-    console.log("No notification recipients found.");
-    return;
-  }
-
   // Save in-app notifications independently of email delivery.
   try {
     await Notification.insertMany(
@@ -143,8 +137,6 @@ export const notifyUsers = async ({
       })),
       { ordered: false },
     );
-
-    console.log(`Saved ${recipientIds.length} in-app notification(s).`);
   } catch (error) {
     console.error("Notification database insert error:", error);
   }

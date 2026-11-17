@@ -189,7 +189,6 @@ router.post("/:id/messages", dynamicUpload, async (req, res, next) => {
         ticketId: t._id,
       });
     } else {
-      console.log(t);
       notifyTicketParticipants({
         ticket: t,
         excludeUserId: req.user.id,
