@@ -27,12 +27,16 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "1mb" }));
+
+app.use("/uploads", express.static(uploadDir));
+
 app.use(rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false }));
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/api/tickets", requireAuth, ticketRoutes);
 app.use("/api/knowledge", requireAuth, knowledgeRoutes);
 app.use("/api/notifications", requireAuth, notificationRoutes);
 app.use("/api/settings", requireAuth, settingRoutes);
+
 app.use((err, _req, res, _next) => {
   console.error(err);
   res

@@ -4,8 +4,8 @@ import fs from "node:fs";
 
 import Settings from "../models/Settings.js";
 
-const uploadRoot = path.resolve(process.env.UPLOAD_DIR || "./uploads");
-fs.mkdirSync(uploadRoot, { recursive: true });
+const uploadPath = path.resolve(process.env.UPLOAD_DIR || "./uploads");
+fs.mkdirSync(uploadPath, { recursive: true });
 
 const MIMETYPE_EXENSION = {
   jpg: "image/jpeg",
@@ -20,7 +20,7 @@ const MIMETYPE_EXENSION = {
 
 export const dynamicUpload = async (req, res, next) => {
   const storage = multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, uploadRoot),
+    destination: (_req, _file, cb) => cb(null, uploadPath),
     filename: (_req, file, cb) =>
       cb(null, crypto.randomUUID() + path.extname(file.originalname).toLowerCase()),
   });
@@ -31,6 +31,8 @@ export const dynamicUpload = async (req, res, next) => {
     );
 
     const maxMB = Number(generalSettings?.maxFileSizeMB) || 10;
+    const MAX_FILES = 5;
+
     const allowed = new Set(
       generalSettings?.allowedFileTypes
         .map((t) => MIMETYPE_EXENSION[t.toLowerCase()])
@@ -41,7 +43,7 @@ export const dynamicUpload = async (req, res, next) => {
       storage,
       limits: {
         fileSize: maxMB * 1024 * 1024,
-        files: 5,
+        files: MAX_FILES,
       },
       fileFilter: (_req, file, cb) => {
         if (!allowed.has(file.mimetype)) {
@@ -53,9 +55,33 @@ export const dynamicUpload = async (req, res, next) => {
 
         cb(null, true);
       },
-    }).array("attachments", 5);
+    }).array("attachments", MAX_FILES);
 
-    uploadMiddleware(req, res, next);
+    uploadMiddleware(req, res, (error) => {
+      if (error instanceof multer.MulterError) {
+        if (error.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({
+            success: false,
+            message: `File size exceeds the maximum allowed size of ${maxMB}MB.`,
+            code: error.code,
+          });
+        }
+      }
+
+      if (error.code === "LIMIT_FILE_COUNT") {
+        return res.status(400).json({
+          success: false,
+          message: `You can upload a maximum of ${MAX_FILES} files.`,
+          code: error.code,
+        });
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+        code: error.code,
+      });
+    });
   } catch (error) {
     next(error);
   }
