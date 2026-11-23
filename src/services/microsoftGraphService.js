@@ -128,7 +128,7 @@ export async function getSupportGroupMembers(forceRefresh = false) {
 
   cacheExpiresAt = Date.now() + CACHE_DURATION;
 
-  console.log(`[Microsoft Graph] Retrieved ${cachedSupportMembers.length} IT Support members.`);
+  // console.log(`[Microsoft Graph] Retrieved ${cachedSupportMembers.length} IT Support members.`);
 
   return cachedSupportMembers;
 }
