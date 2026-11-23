@@ -17,13 +17,29 @@ const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.resolve(process.env.UPLOAD_DIR || path.join(__dirname, "../uploads"));
 
+// Configure proxy trust first
+app.set("trust proxy", 1);
+
 fs.mkdirSync(uploadDir, { recursive: true });
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
+
 app.use(
   cors({
+    xFrameOptions: false,
+
     origin: (process.env.CLIENT_ORIGIN || "http://localhost:3000").split(","),
     allowedHeaders: ["Authorization", "Content-Type"],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "frame-ancestors": ["'self'", "http://localhost:3000", process.env.CLIENT_ORIGIN],
+      },
+    },
   }),
 );
 app.use(express.json({ limit: "1mb" }));
